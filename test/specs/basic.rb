@@ -156,8 +156,8 @@ describe "Habitat CLI" do
         end
     end
 
-    context "build a package" do
-        it "should build without failure" do
+    context "the Habitat studio" do
+        it "should build a sample package without failure" do
             plan_dir = ctx.mk_temp_dir()
 
             FIXTURE IS MISSING AGAIN
