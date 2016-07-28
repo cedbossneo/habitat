@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use dbcache::{self, ExpiringSet, IndexSet, InstaSet};
+use dbcache::{self, ExpiringSet, InstaSet};
 use hab_net::server::Envelope;
 use protocol::net::{self, ErrCode};
 use protocol::sessionsrv as proto;
@@ -27,9 +27,7 @@ pub fn account_get(req: &mut Envelope,
                    -> Result<()> {
     let msg: proto::AccountGet = try!(req.parse_msg());
     match state.datastore.accounts.find_by_username(&msg.get_name().to_string()) {
-        Ok(account) => {
-            try!(req.reply_complete(sock, &account));
-        }
+        Ok(account) => try!(req.reply_complete(sock, &account)),
         Err(dbcache::Error::EntityNotFound) => {
             let err = net::err(ErrCode::ENTITY_NOT_FOUND, "ss:account_get:0");
             try!(req.reply_complete(sock, &err));
@@ -37,6 +35,35 @@ pub fn account_get(req: &mut Envelope,
         Err(e) => {
             error!("datastore error, err={:?}", e);
             let err = net::err(ErrCode::INTERNAL, "ss:account_get:1");
+            try!(req.reply_complete(sock, &err));
+        }
+    }
+    Ok(())
+}
+
+pub fn account_search(req: &mut Envelope,
+                      sock: &mut zmq::Socket,
+                      state: &mut ServerState)
+                      -> Result<()> {
+    let mut msg: proto::AccountSearch = try!(req.parse_msg());
+    let result = match msg.get_key() {
+        proto::AccountSearchKey::Id => {
+            let value: u64 = msg.take_value().parse().unwrap();
+            state.datastore.accounts.find(&value)
+        }
+        proto::AccountSearchKey::Name => {
+            state.datastore.accounts.find_by_username(&msg.take_value())
+        }
+    };
+    match result {
+        Ok(account) => try!(req.reply_complete(sock, &account)),
+        Err(dbcache::Error::EntityNotFound) => {
+            let err = net::err(ErrCode::ENTITY_NOT_FOUND, "ss:account-search:0");
+            try!(req.reply_complete(sock, &err));
+        }
+        Err(e) => {
+            error!("datastore error, err={:?}", e);
+            let err = net::err(ErrCode::INTERNAL, "ss:account-search:1");
             try!(req.reply_complete(sock, &err));
         }
     }

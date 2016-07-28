@@ -14,7 +14,8 @@
 
 use std::sync::Arc;
 
-use dbcache::{self, data_store, Bucket, ConnectionPool, ExpiringSet, IndexSet, InstaSet};
+use dbcache;
+use dbcache::data_store::*;
 use protocol::sessionsrv;
 
 use config::Config;
@@ -26,7 +27,7 @@ pub struct DataStore {
     pub sessions: SessionTable,
 }
 
-impl data_store::Pool for DataStore {
+impl Pool for DataStore {
     type Config = Config;
 
     fn init(pool: Arc<ConnectionPool>) -> Self {

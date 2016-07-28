@@ -12,12 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use hab_net;
-use hab_net::routing::{Broker, BrokerConn};
-use hab_net::oauth::github::GitHubClient;
+use iron::Handler;
 use iron::headers::{self, Authorization, Bearer};
 use iron::method::Method;
-use iron::middleware::{AfterMiddleware, BeforeMiddleware};
+use iron::middleware::{AfterMiddleware, AroundMiddleware, BeforeMiddleware};
 use iron::prelude::*;
 use iron::status;
 use iron::typemap::Key;
@@ -27,9 +25,56 @@ use protocol::sessionsrv::*;
 use protocol::net::{self, ErrCode};
 use rustc_serialize::json::{self, ToJson};
 
-use super::super::server::ZMQ_CONTEXT;
-use super::GitHubCli;
-use error::Error;
+use super::super::error::Error;
+use super::super::routing::{Broker, BrokerConn};
+use super::super::oauth::github::GitHubClient;
+use super::HttpError;
+
+/// Wrapper around the standard `iron::Chain` to assist in adding middleware on a per-handler basis
+pub struct XHandler(Chain);
+
+impl XHandler {
+    /// Create a new XHandler
+    pub fn new<H: Handler>(handler: H) -> Self {
+        XHandler(Chain::new(handler))
+    }
+
+    /// Add one or more before-middleware to the handler's chain
+    pub fn before<M: BeforeMiddleware>(mut self, middleware: Vec<M>) -> Self {
+        for m in middleware.into_iter() {
+            self.0.link_before(m);
+        }
+        self
+    }
+
+    /// Add one or more after-middleware to the handler's chain
+    pub fn after<M: AfterMiddleware>(mut self, middleware: Vec<M>) -> Self {
+        for m in middleware.into_iter() {
+            self.0.link_after(m);
+        }
+        self
+    }
+
+    /// Ad one or more around-middleware to the handler's chain
+    pub fn around<M: AroundMiddleware>(mut self, middleware: Vec<M>) -> Self {
+        for m in middleware.into_iter() {
+            self.0.link_around(m);
+        }
+        self
+    }
+}
+
+impl Handler for XHandler {
+    fn handle(&self, req: &mut Request) -> IronResult<Response> {
+        self.0.handle(req)
+    }
+}
+
+pub struct GitHubCli;
+
+impl Key for GitHubCli {
+    type Value = GitHubClient;
+}
 
 pub struct RouteBroker;
 
@@ -39,7 +84,7 @@ impl Key for RouteBroker {
 
 impl BeforeMiddleware for RouteBroker {
     fn before(&self, req: &mut Request) -> IronResult<()> {
-        let conn = Broker::connect(&**ZMQ_CONTEXT).unwrap();
+        let conn = Broker::connect().unwrap();
         req.extensions.insert::<RouteBroker>(conn);
         Ok(())
     }
@@ -67,13 +112,13 @@ impl BeforeMiddleware for Authenticated {
                                 try!(session_create(&github, token))
                             } else {
                                 let encoded = json::encode(&err.to_json()).unwrap();
-                                return Err(IronError::new(Error::Authorization,
+                                return Err(IronError::new(HttpError::Authorization,
                                                           (encoded, status::Unauthorized)));
                             }
                         }
                     }
                 }
-                _ => return Err(IronError::new(Error::Authorization, status::Unauthorized)),
+                _ => return Err(IronError::new(HttpError::Authorization, status::Unauthorized)),
             }
         };
         req.extensions.insert::<Self>(session);
@@ -106,11 +151,11 @@ fn session_create(github: &GitHubClient, token: &str) -> IronResult<Session> {
                 Err(_) => {
                     let err = net::err(ErrCode::ACCESS_DENIED, "rg:auth:0");
                     let encoded = json::encode(&err.to_json()).unwrap();
-                    return Err(IronError::new(Error::Authorization,
+                    return Err(IronError::new(HttpError::Authorization,
                                               (encoded, status::Unauthorized)));
                 }
             };
-            let mut conn = Broker::connect(&**ZMQ_CONTEXT).unwrap();
+            let mut conn = Broker::connect().unwrap();
             let mut request = SessionCreate::new();
             request.set_token(token.to_string());
             request.set_extern_id(user.id);
@@ -121,21 +166,21 @@ fn session_create(github: &GitHubClient, token: &str) -> IronResult<Session> {
                 Ok(session) => Ok(session),
                 Err(err) => {
                     let encoded = json::encode(&err.to_json()).unwrap();
-                    Err(IronError::new(Error::Authorization, (encoded, status::Unauthorized)))
+                    Err(IronError::new(HttpError::Authorization, (encoded, status::Unauthorized)))
                 }
             }
         }
-        Err(e @ hab_net::Error::JsonDecode(_)) => {
+        Err(e @ Error::JsonDecode(_)) => {
             debug!("github user get, err={:?}", e);
             let err = net::err(ErrCode::BAD_REMOTE_REPLY, "rg:auth:1");
             let encoded = json::encode(&err.to_json()).unwrap();
-            Err(IronError::new(Error::Authorization, (encoded, status::Unauthorized)))
+            Err(IronError::new(HttpError::Authorization, (encoded, status::Unauthorized)))
         }
         Err(e) => {
             debug!("github user get, err={:?}", e);
             let err = net::err(ErrCode::BUG, "rg:auth:2");
             let encoded = json::encode(&err.to_json()).unwrap();
-            Err(IronError::new(Error::Authorization, (encoded, status::Unauthorized)))
+            Err(IronError::new(HttpError::Authorization, (encoded, status::Unauthorized)))
         }
     }
 }

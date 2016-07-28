@@ -13,12 +13,28 @@
 // limitations under the License.
 
 use std::collections::BTreeMap;
+use std::str::FromStr;
 
 use rustc_serialize::json::{Json, ToJson};
 
+use error::{ProtocolError, ProtocolResult};
 use message::{Persistable, Routable};
+use search::FromSearchPair;
 
 pub use message::sessionsrv::*;
+
+impl FromStr for AccountSearchKey {
+    type Err = ProtocolError;
+
+    fn from_str(value: &str) -> ProtocolResult<Self> {
+        let value = value.to_lowercase();
+        match value.as_ref() {
+            "name" => Ok(AccountSearchKey::Name),
+            "id" => Ok(AccountSearchKey::Id),
+            _ => Err(ProtocolError::BadSearchKey(value)),
+        }
+    }
+}
 
 impl Routable for SessionCreate {
     type H = u64;
@@ -75,6 +91,24 @@ impl Routable for AccountGet {
 
     fn route_key(&self) -> Option<Self::H> {
         Some(self.get_name().to_string())
+    }
+}
+
+impl FromSearchPair for AccountSearch {
+    fn from_search_pair<K: AsRef<str>, V: Into<String>>(key: K, value: V) -> ProtocolResult<Self> {
+        let key = try!(AccountSearchKey::from_str(key.as_ref()));
+        let mut search = AccountSearch::new();
+        search.set_key(key);
+        search.set_value(value.into());
+        Ok(search)
+    }
+}
+
+impl Routable for AccountSearch {
+    type H = String;
+
+    fn route_key(&self) -> Option<Self::H> {
+        Some(self.get_value().to_string())
     }
 }
 

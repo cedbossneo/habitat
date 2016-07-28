@@ -19,9 +19,8 @@ pub mod handlers;
 use std::sync::{mpsc, Arc};
 use std::thread::{self, JoinHandle};
 
-use depot;
-use hab_net::oauth::github::GitHubClient;
 use hab_net::http::middleware::*;
+use hab_net::oauth::github::GitHubClient;
 use iron::prelude::*;
 use iron::Protocol;
 use mount::Mount;
@@ -40,25 +39,8 @@ const HTTP_THREAD_COUNT: usize = 128;
 pub fn router(config: Arc<Config>) -> Result<Chain> {
     let router = router!(
         get "/status" => status,
-        get "/authenticate/:code" => session_create,
-
-        post "/jobs" => XHandler::new(job_create).before(vec![Authenticated]),
-        get "/jobs/:id" => job_show,
-
-        get "/user/invitations" => {
-            XHandler::new(list_account_invitations).before(vec![Authenticated])
-        },
-        put "/user/invitations/:invitation_id" => {
-            XHandler::new(accept_invitation).before(vec![Authenticated])
-        },
-        get "/user/origins" => XHandler::new(list_user_origins).before(vec![Authenticated]),
-
-        post "/projects" => XHandler::new(project_create).before(vec![Authenticated]),
-        get "/projects/:origin/:name" => project_show,
-        put "/projects/:origin/:name" => XHandler::new(project_update).before(vec![Authenticated]),
-        delete "/projects/:origin/:name" => {
-            XHandler::new(project_delete).before(vec![Authenticated])
-        },
+        post "/search" => XHandler::new(search).before(vec![Authenticated]),
+        get "/accounts/:id" => XHandler::new(account_show).before(vec![Authenticated]),
     );
     let mut chain = Chain::new(router);
     chain.link(persistent::Read::<GitHubCli>::both(GitHubClient::new(&*config)));
@@ -72,7 +54,6 @@ pub fn router(config: Arc<Config>) -> Result<Chain> {
 ///
 /// # Errors
 ///
-/// * Depot could not be started
 /// * Couldn't create Router or it's middleware
 ///
 /// # Panics
@@ -80,18 +61,14 @@ pub fn router(config: Arc<Config>) -> Result<Chain> {
 /// * Listener crashed during startup
 pub fn run(config: Arc<Config>) -> Result<JoinHandle<()>> {
     let (tx, rx) = mpsc::sync_channel(1);
-
     let addr = config.http_addr.clone();
-    let depot = try!(depot::Depot::new(config.depot.clone()));
-    let depot_chain = try!(depot::server::router(depot));
-
     let mut mount = Mount::new();
     if let Some(ref path) = config.ui_root {
         debug!("Mounting UI at filepath {}", path);
         mount.mount("/", Static::new(path));
     }
     let chain = try!(router(config));
-    mount.mount("/v1", chain).mount("/v1/depot", depot_chain);
+    mount.mount("/v1", chain);
 
     let handle = thread::Builder::new()
         .name("http-srv".to_string())

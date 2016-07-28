@@ -15,6 +15,16 @@ message AccountGet {
   required string name = 1;
 }
 
+message AccountSearch {
+  required AccountSearchKey key = 1;
+  required string value = 2;
+}
+
+enum AccountSearchKey {
+  Id = 0;
+  Name = 1;
+}
+
 message Session {
   required uint64 id = 1;
   required string email = 2;

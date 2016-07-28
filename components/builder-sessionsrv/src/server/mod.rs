@@ -17,7 +17,6 @@ pub mod handlers;
 use std::ops::Deref;
 use std::sync::{Arc, RwLock};
 
-use dbcache::{ExpiringSet, InstaSet, IndexSet};
 use dbcache::data_store::Pool;
 use hab_net::{Application, Supervisor};
 use hab_net::dispatcher::prelude::*;
@@ -38,9 +37,7 @@ pub struct ServerState {
 
 impl ServerState {
     pub fn new(datastore: DataStore) -> Self {
-        ServerState {
-            datastore: Arc::new(Box::new(datastore)),
-        }
+        ServerState { datastore: Arc::new(Box::new(datastore)) }
     }
 }
 
@@ -71,6 +68,7 @@ impl Dispatcher for Worker {
                 -> Result<()> {
         match message.message_id() {
             "AccountGet" => handlers::account_get(message, sock, state),
+            "AccountSearch" => handlers::account_search(message, sock, state),
             "SessionCreate" => handlers::session_create(message, sock, state),
             "SessionGet" => handlers::session_get(message, sock, state),
             _ => panic!("unhandled message"),

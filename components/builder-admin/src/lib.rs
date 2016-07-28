@@ -12,55 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate fnv;
+extern crate bodyparser;
 extern crate habitat_builder_protocol as protocol;
+extern crate habitat_core as hab_core;
+extern crate habitat_net as hab_net;
 extern crate hyper;
 extern crate iron;
 #[macro_use]
 extern crate lazy_static;
-extern crate libc;
 #[macro_use]
 extern crate log;
-extern crate num_cpus;
+extern crate mount;
 extern crate persistent;
 extern crate protobuf;
+#[macro_use]
+extern crate router;
 extern crate rustc_serialize;
-extern crate time;
+extern crate serde_json;
+extern crate staticfile;
+extern crate toml;
 extern crate unicase;
+extern crate urlencoded;
 extern crate zmq;
 
 pub mod config;
 pub mod error;
-pub mod dispatcher;
 pub mod http;
-pub mod oauth;
-pub mod routing;
 pub mod server;
-pub mod supervisor;
 
-use std::process::Command;
-
+pub use self::config::Config;
 pub use self::error::{Error, Result};
-pub use self::server::{Application, ServerReg};
-pub use self::supervisor::Supervisor;
-
-pub fn hostname() -> Result<String> {
-    let output = try!(Command::new("sh")
-        .arg("-c")
-        .arg("hostname | awk '{printf \"%s\", $NF; exit}'")
-        .output());
-    match output.status.success() {
-        true => {
-            debug!("Hostname address is {}",
-                   String::from_utf8_lossy(&output.stdout));
-            let hostname = try!(String::from_utf8(output.stdout).or(Err(Error::Sys)));
-            Ok(hostname)
-        }
-        false => {
-            debug!("Hostname address command returned: OUT: {} ERR: {}",
-                   String::from_utf8_lossy(&output.stdout),
-                   String::from_utf8_lossy(&output.stderr));
-            Err(Error::Sys)
-        }
-    }
-}
