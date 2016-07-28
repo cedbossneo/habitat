@@ -32,7 +32,7 @@ endif
 
 BIN = director hab sup
 LIB = builder-dbcache builder-protocol common core depot-client http-client net
-SRV = builder-api builder-jobsrv builder-sessionsrv builder-vault builder-worker depot
+SRV = builder-api builder-router builder-jobsrv builder-sessionsrv builder-vault builder-worker depot
 ALL = $(BIN) $(LIB) $(SRV)
 
 .DEFAULT_GOAL := build-bin
@@ -95,7 +95,7 @@ help:
 .PHONY: help
 
 api-shell: image ## launches a development shell running the API
-	$(api_run) sh -c 'cp /src/support/run-api.sh /usr/local/sbin/api; api start; bash'
+	$(api_run) sh -c 'cp /src/support/run-api.sh /usr/local/sbin/api; api build; api start; bash'
 .PHONY: api-shell
 
 shell: image ## launches a development shell
