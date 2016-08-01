@@ -47,7 +47,7 @@ describe "Habitat CLI" do
 			#ENV.delete('HAB_CACHE_KEY_PATH')
 			ENV.delete('HAB_ORIGIN')
 			# TODO
-			#`rm -rf ./results`
+			`rm -rf ./results`
 			#ENV.delete('HAB_ROOT_PATH')
 			#FileUtils.remove_entry(Hab.hab_key_cache)
 			# TODO: kill the studio only if all tests pass?
