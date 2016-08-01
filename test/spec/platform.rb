@@ -6,6 +6,9 @@ require 'time'
 module HabTesting
 
 	module Utils
+
+        # parse a ./results/last_build.env file, split lines on `=`
+        # and return a hash containing all key/values
 		def self.parse_last_build
 			results = {}
 			## TODO: we should have a test root dir var
@@ -19,21 +22,39 @@ module HabTesting
 		end
 	end
 
+
+    # The intent of the Platform class is to store any platform-independent
+    # variables.
 	class Platform
+        # path to the `hab` command
 		attr_accessor :hab_bin;
+        # TODO: unusued
 		attr_accessor :hab_key_cache;
+        # A unique testing organization
 		attr_accessor :hab_org;
+        # A unique testing origin
 		attr_accessor :hab_origin;
+        # The path to installed packages, (ex: /hab/pkgs on Linux)
 		attr_accessor :hab_pkg_path;
+        # TODO: path to the build command
 		attr_accessor :hab_plan_build;
+        # A unique testing ring name
 		attr_accessor :hab_ring;
+        # TODO: The root location of Habitat data, HAB_ROOT_PATH
 		attr_accessor :hab_root_path;
+        # A unique testing service group
 		attr_accessor :hab_service_group;
+        # TODO: the location of the studio root
 		attr_accessor :hab_studio_root;
+        # path to the `hab-sup` command
 		attr_accessor :hab_sup_bin;
+        # A unique testing user
 		attr_accessor :hab_user;
 
+        # command output logs are stored in this directory
 		attr_accessor :log_dir;
+        # The filename currently be used to log command output.
+        # This file is stored in @log_dir
 		attr_accessor :log_name;
 
         # if true, display command output
@@ -84,15 +105,15 @@ module HabTesting
 			@hab_root_path = Dir.mktmpdir("hab_test_root")
 
 			@hab_bin="/src/components/hab/target/debug/hab"
-			@hab_key_cache = "#{@hab_root_path}/hab/cache/keys"
+			#@hab_key_cache = "#{@hab_root_path}/hab/cache/keys"
 			@hab_org = "org_#{unique_name()}"
 			@hab_origin = "origin_#{unique_name()}"
-			@hab_plan_build = "/src/components/plan-build/bin/hab-plan-build.sh"
+			#@hab_plan_build = "/src/components/plan-build/bin/hab-plan-build.sh"
 			@hab_pkg_path = "/hab/pkgs"
 			@hab_ring = "ring_#{unique_name()}"
 			# todo
 			@hab_service_group = "service_group_#{unique_name()}"
-			@hab_studio_root = Dir.mktmpdir("hab_test_studio")
+			#@hab_studio_root = Dir.mktmpdir("hab_test_studio")
 			@hab_sup_bin = "/src/components/sup/target/debug/hab-sup"
 			@hab_user = "user_#{unique_name()}"
 
@@ -105,7 +126,8 @@ module HabTesting
 			banner()
 		end
 
-
+        # Common setup for tests, including setting a test origin
+        # and key generation.
 		def common_setup
 			ENV['HAB_ORIGIN'] = @hab_origin
 			cmd_expect("origin key generate #{@hab_origin}",
@@ -122,6 +144,7 @@ module HabTesting
 			puts "-" * 80
 		end
 
+        # Common teardown for tests
 		def common_teardown
 			if @cleanup
 				puts "Clearing test environment"
@@ -135,6 +158,8 @@ module HabTesting
 			end
 		end
 
+
+        # execute a `hab` subcommand and wait for the process to finish
 		def cmd(cmdline, **cmd_options)
             debug = cmd_options["debug"] || @cmd_debug
 
@@ -153,7 +178,9 @@ module HabTesting
 			return $?
 		end
 
-		#def cmd_expect(cmdline, desired_output, debug = @cmd_debug, timeout = @cmd_timeout_seconds)
+        # execute a possibly long-running process and wait for a particular string
+        # in it's output. If the output is found, kill the process and return
+        # true. Otherwise, raise an exception so specs fail quickly.
 		def cmd_expect(cmdline, desired_output, **cmd_options)
             debug = cmd_options["debug"] || @cmd_debug
             timeout = cmd_options["timeout_seconds"] || @cmd_timeout_seconds
@@ -171,7 +198,7 @@ module HabTesting
 
 			begin
 				Open3.popen3(fullcmdline) do |stdin, stdout, stderr, wait_thread|
-					puts "Started child process"
+					puts "Started child process" if debug
 					found = false
 					begin
 						Timeout::timeout(timeout) do
@@ -188,14 +215,14 @@ module HabTesting
 					rescue EOFError
 						raise "Process finished without finding desired output: #{desired_output}"
 					rescue Timeout::Error
-						puts "Timeout"
+						puts "Timeout" if debug
 						Process.kill('TERM', wait_thread.pid)
-						puts "Child process killed"
+						puts "Child process killed" if debug
 		                raise "Proces timeout waiting for desired output: #{desired_output}"
 					end
 
 					if found == true then
-						puts "\tFound: #{desired_output}"
+						puts "\tFound: #{desired_output}" if debug
 						return true
 					else
 		                raise "Output not found: #{desired_output}"
@@ -204,6 +231,7 @@ module HabTesting
 			end
 		end
 
+        # generate a unique log file name in the given log_dir
 		def log_file_name()
 			File.join(@log_dir, @log_name)
 		end
@@ -220,6 +248,7 @@ module HabTesting
 
 	class WindowsPlatform
 		def initialize
+            # :-(
 			raise "Windows platform not implemented"
 		end
 	end

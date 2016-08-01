@@ -13,13 +13,6 @@ ctx = HabTesting::LinuxPlatform.new()
 describe "Habitat CLI" do
 
     before(:all) do
-        # ensure we are starting with an empty set of env vars
-        # this _could_ be a test, but since we also set env vars in the
-        # before() block, it makes a chicken/egg issue.
-        #ctx.env_vars.each do |e|
-        #    raise "#{e} is currently set, please clear the value and try again" \
-        #        unless ENV[e].nil?
-        #end
 		ctx.common_setup()
     end
 
@@ -54,13 +47,15 @@ describe "Habitat CLI" do
 		# build/install/start with a simple package, instead of downloading a
 		# prebuilt one from the Depot
         it "should build, install and start a simple service without failure" do
+            # building a package can take quite awhile, let's bump the timeout to
+            # 60 seconds to be sure we finish in time.
             ctx.cmd_expect("studio build fixtures/simple_service",
                                    "I love it when a plan.sh comes together",
                                    :debug => true,
                                    :timeout => 60)
 
 			last_build = HabTesting::Utils::parse_last_build()
-			#puts last_build
+			puts last_build if ctx.cmd_debug
 			expect(last_build["pkg_origin"]).to eq ctx.hab_origin
 			expect(last_build["pkg_name"]).to eq "simple_service"
 			expect(last_build["pkg_version"]).to eq "0.0.1"
@@ -78,6 +73,7 @@ describe "Habitat CLI" do
 
 			expect(File.exist?(installed_path)).to be true
 
+            # this should start relatively quickly, so we'll use the default timeout
 			ctx.cmd_expect("start #{ctx.hab_origin}/simple_service", "Shipping out to Boston")
         end
     end
