@@ -7,13 +7,8 @@ require_relative 'platform'
 
 ctx = HabTesting::LinuxPlatform.new()
 
-puts "-" * 80
-puts "Test params:"
-ctx.instance_variables.sort.each do |k|
-	puts "#{k[1..-1]} = #{ctx.instance_variable_get(k)}"
-end
-puts "Logging command output to #{ctx.log_file_name()}"
-puts "-" * 80
+# to see all command output:
+# ctx.cmd_debug = true
 
 describe "Habitat CLI" do
 
@@ -25,36 +20,11 @@ describe "Habitat CLI" do
         #    raise "#{e} is currently set, please clear the value and try again" \
         #        unless ENV[e].nil?
         #end
-
-        ENV['HAB_ORIGIN'] = ctx.hab_origin
-        #ENV['HAB_CACHE_KEY_PATH'] = ctx.hab_key_cache
-        #ENV['HAB_ROOT_PATH'] = ctx.hab_root_path
-
-        ctx.cmd("origin key generate #{ctx.hab_origin}")
-        ctx.cmd("user key generate #{ctx.hab_user}")
-        ctx.cmd("ring key generate #{ctx.hab_ring}")
-        # remove the studio if it already exists
-        ctx.cmd("studio rm #{ctx.hab_origin}")
-        #puts "Creating new studio, this may take a few minutes"
-        #ctx.cmd("studio -k #{ctx.hab_origin} new")
-        #puts "Setup complete"
-        puts "-" * 80
+		ctx.common_setup()
     end
 
     after(:all) do
-		if ctx.cleanup
-			puts "Clearing test environment"
-			#ENV.delete('HAB_CACHE_KEY_PATH')
-			ENV.delete('HAB_ORIGIN')
-			# TODO
-			`rm -rf ./results`
-			#ENV.delete('HAB_ROOT_PATH')
-			#FileUtils.remove_entry(Hab.hab_key_cache)
-			# TODO: kill the studio only if all tests pass?
-			#ctx.cmd("studio rm")
-		else
-			puts "WARNING: not cleaning up testing environment"
-		end
+		ctx.common_teardown()
     end
 
 	after(:each) do |example|
@@ -84,10 +54,10 @@ describe "Habitat CLI" do
 		# build/install/start with a simple package, instead of downloading a
 		# prebuilt one from the Depot
         it "should build, install and start a simple service without failure" do
-            # TODO: error handling with paths
-            result = ctx.cmd("studio build fixtures/simple_service")
-            expect(result).not_to be_nil
-            expect(result.success?).to be true
+            ctx.cmd_expect("studio build fixtures/simple_service",
+                                   "I love it when a plan.sh comes together",
+                                   :debug => true,
+                                   :timeout => 60)
 
 			last_build = HabTesting::Utils::parse_last_build()
 			#puts last_build
@@ -97,7 +67,9 @@ describe "Habitat CLI" do
 
 			built_artifact = Pathname.new("results").join(last_build["pkg_artifact"])
 			expect(File.exist?(built_artifact)).to be true
-			result = ctx.cmd("pkg install ./results/#{last_build["pkg_artifact"]}")
+			ctx.cmd_expect("pkg install ./results/#{last_build["pkg_artifact"]}",
+                "Install of #{ctx.hab_origin}/simple_service/0.0.1/#{last_build["pkg_release"]} complete with 1 packages installed")
+
     		installed_path = Pathname.new(ctx.hab_pkg_path).join(
 								ctx.hab_origin,
 								last_build["pkg_name"],
@@ -106,8 +78,7 @@ describe "Habitat CLI" do
 
 			expect(File.exist?(installed_path)).to be true
 
-			result = ctx.wait_for_cmd_output("start #{ctx.hab_origin}/simple_service", "Shipping out to Boston")
-			expect(result).to be true
+			ctx.cmd_expect("start #{ctx.hab_origin}/simple_service", "Shipping out to Boston")
         end
     end
 end

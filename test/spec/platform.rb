@@ -36,13 +36,21 @@ module HabTesting
 		attr_accessor :log_dir;
 		attr_accessor :log_name;
 
+        # if true, display command output
+        attr_accessor :cmd_debug;
+        # default timeout for child processes before failing
+        attr_accessor :cmd_timeout_seconds;
+
 		# if there is an example failure, don't cleanup the state on
 		# disk if @cleanup is set to false
 		attr_accessor :cleanup;
+
+        # generate a unique name for use in testing
 		def unique_name()
 			SecureRandom.uuid
 		end
 
+        # return a list of HAB_ environment vars
 		def env_vars()
 			#TODO: share these between Inspec and Rspec?
 			return %w(HAB_AUTH_TOKEN
@@ -57,6 +65,17 @@ module HabTesting
 					HAB_STUDIOS_HOME
 					HAB_STUDIO_ROOT
 					HAB_USER)
+		end
+
+        # display testing parameters upon startup
+		def banner()
+			puts "-" * 80
+			puts "Test params:"
+			self.instance_variables.sort.each do |k|
+				puts "#{k[1..-1]} = #{self.instance_variable_get(k)}"
+			end
+			puts "Logging command output to #{self.log_file_name()}"
+			puts "-" * 80
 		end
 	end
 
@@ -81,9 +100,44 @@ module HabTesting
 			@log_dir = "./logs"
 
 			@cleanup = true
+            @cmd_debug = false
+            @cmd_timeout_seconds = 30
+			banner()
 		end
 
-		def cmd(cmdline, debug=false)
+
+		def common_setup
+			ENV['HAB_ORIGIN'] = @hab_origin
+			cmd_expect("origin key generate #{@hab_origin}",
+				"Generated origin key pair #{@hab_origin}")
+			cmd_expect("user key generate #{@hab_user}",
+				"Generated user key pair #{@hab_user}")
+			cmd_expect("ring key generate #{@hab_ring}",
+				"Generated ring key pair #{@hab_ring}")
+			# remove the studio if it already exists
+			cmd("studio rm #{@hab_origin}")
+			#puts "Creating new studio, this may take a few minutes"
+			#ctx.cmd("studio -k #{ctx.hab_origin} new")
+			#puts "Setup complete"
+			puts "-" * 80
+		end
+
+		def common_teardown
+			if @cleanup
+				puts "Clearing test environment"
+				ENV.delete('HAB_ORIGIN')
+				# TODO
+				#`rm -rf ./results`
+				# TODO: kill the studio only if all tests pass?
+				#ctx.cmd("studio rm")
+			else
+				puts "WARNING: not cleaning up testing environment"
+			end
+		end
+
+		def cmd(cmdline, **cmd_options)
+            debug = cmd_options["debug"] || @cmd_debug
+
 			if debug then
 				puts "X" * 80
 				puts `env`
@@ -99,7 +153,11 @@ module HabTesting
 			return $?
 		end
 
-		def wait_for_cmd_output(cmdline, desired_output, debug = false, timeout = 10)
+		#def cmd_expect(cmdline, desired_output, debug = @cmd_debug, timeout = @cmd_timeout_seconds)
+		def cmd_expect(cmdline, desired_output, **cmd_options)
+            debug = cmd_options["debug"] || @cmd_debug
+            timeout = cmd_options["timeout_seconds"] || @cmd_timeout_seconds
+
 			if debug then
 				puts "X" * 80
 				puts `env`
@@ -128,20 +186,19 @@ module HabTesting
 							end
 						end
 					rescue EOFError
-						puts "Process finished without finding desired output"
-						return false
+						raise "Process finished without finding desired output: #{desired_output}"
 					rescue Timeout::Error
 						puts "Timeout"
 						Process.kill('TERM', wait_thread.pid)
 						puts "Child process killed"
-						return false
+		                raise "Proces timeout waiting for desired output: #{desired_output}"
 					end
 
 					if found == true then
-						puts "Found: #{desired_output}"
+						puts "\tFound: #{desired_output}"
 						return true
 					else
-						return false
+		                raise "Output not found: #{desired_output}"
 					end
 				end
 			end
