@@ -8,7 +8,7 @@ require_relative 'platform'
 ctx = HabTesting::LinuxPlatform.new()
 
 # to see all command output:
-ctx.cmd_debug = true
+#ctx.cmd_debug = true
 
 describe "Habitat CLI" do
 
@@ -57,7 +57,7 @@ describe "Habitat CLI" do
             result = ctx.cmd_expect("studio build fixtures/simple_service",
                                    "I love it when a plan.sh comes together",
                                    :debug => true,
-                                   :timeout => 60)
+                                   :timeout_seconds => 60)
             expect(result.exited?).to be true
             expect(result.exitstatus).to eq 0
 
@@ -70,7 +70,8 @@ describe "Habitat CLI" do
 			built_artifact = Pathname.new("results").join(last_build["pkg_artifact"])
 			expect(File.exist?(built_artifact)).to be true
 			result = ctx.cmd_expect("pkg install ./results/#{last_build["pkg_artifact"]}",
-                "Install of #{ctx.hab_origin}/simple_service/0.0.1/#{last_build["pkg_release"]} complete with 1 packages installed")
+                "Install of #{ctx.hab_origin}/simple_service/0.0.1/#{last_build["pkg_release"]} complete with 1 packages installed",
+                :kill_when_found => false)
             expect(result.exited?).to be true
             expect(result.exitstatus).to eq 0
 
@@ -82,6 +83,8 @@ describe "Habitat CLI" do
 			expect(File.exist?(installed_path)).to be true
 
             # this should start relatively quickly, so we'll use the default timeout
+            # This is a long running process, so kill it when we've found the output
+            # that we're looking for.
 			result = ctx.cmd_expect("start #{ctx.hab_origin}/simple_service",
                                     "Shipping out to Boston",
                                     :kill_when_found => true)

@@ -161,7 +161,7 @@ module HabTesting
 
         # execute a `hab` subcommand and wait for the process to finish
 		def cmd(cmdline, **cmd_options)
-            debug = cmd_options["debug"] || @cmd_debug
+            debug = cmd_options[:debug] || @cmd_debug
 
 			if debug then
 				puts "X" * 80
@@ -182,9 +182,18 @@ module HabTesting
         # in it's output. If the output is found, kill the process and return
         # it's exit status. Otherwise, raise an exception so specs fail quickly.
 		def cmd_expect(cmdline, desired_output, **cmd_options)
-            debug = cmd_options["debug"] || @cmd_debug
-            timeout = cmd_options["timeout_seconds"] || @cmd_timeout_seconds
-            kill_when_found = cmd_options["kill_when_found"] || false
+            puts "X" * 80 if @cmd_debug
+            puts cmd_options if @cmd_debug
+
+            debug = cmd_options[:debug] || @cmd_debug
+
+            timeout = cmd_options[:timeout_seconds] || @cmd_timeout_seconds
+            kill_when_found = cmd_options[:kill_when_found] || false
+
+            #puts "KILL_WHEN_FOUND = #{kill_when_found}"
+            #puts "TIMEOUT = #{timeout}"
+            #puts "DBEUG = #{debug}"
+
 			if debug then
 				puts "X" * 80
 				puts `env`
@@ -207,6 +216,7 @@ module HabTesting
 								puts line if debug
 								if line.include?(desired_output) then
                                     if kill_when_found then
+                                        puts "KILL WHEN FOUND"
                                         Process.kill('TERM', wait_thread.pid)
                                         found = true
 									    break
