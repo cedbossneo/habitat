@@ -15,13 +15,11 @@ hab_ports = [9631, 9632, 9636]
 
 hab_ports.each do |p|
     describe port(p) do
-        puts "Ensuring port #{p} isn't open"
         it { should_not be_listening }
     end
 end
 
 hab_env_vars.each do |e|
-    puts "Ensuring #{e} isn't set"
     describe os_env(e) do
         its('content') { should eq nil }
     end
