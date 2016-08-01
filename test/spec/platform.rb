@@ -180,11 +180,11 @@ module HabTesting
 
         # execute a possibly long-running process and wait for a particular string
         # in it's output. If the output is found, kill the process and return
-        # true. Otherwise, raise an exception so specs fail quickly.
+        # it's exit status. Otherwise, raise an exception so specs fail quickly.
 		def cmd_expect(cmdline, desired_output, **cmd_options)
             debug = cmd_options["debug"] || @cmd_debug
             timeout = cmd_options["timeout_seconds"] || @cmd_timeout_seconds
-
+            kill_when_found = cmd_options["kill_when_found"] || false
 			if debug then
 				puts "X" * 80
 				puts `env`
@@ -206,15 +206,25 @@ module HabTesting
 								line = stdout.readline()
 								puts line if debug
 								if line.include?(desired_output) then
-									Process.kill('TERM', wait_thread.pid)
-									found = true
-									break
+                                    if kill_when_found then
+                                        Process.kill('TERM', wait_thread.pid)
+                                        found = true
+									    break
+                                    else
+                                        # let the process finish, or timeout
+                                        found = true
+                                    end
 								end
 							end
 						end
 					rescue EOFError
-						raise "Process finished without finding desired output: #{desired_output}"
+                        if found then
+                            return wait_thread.value
+                        else
+						    raise "Process finished without finding desired output: #{desired_output}"
+                        end
 					rescue Timeout::Error
+                        # TODO: do timeouts always return failure?
 						puts "Timeout" if debug
 						Process.kill('TERM', wait_thread.pid)
 						puts "Child process killed" if debug
@@ -223,7 +233,7 @@ module HabTesting
 
 					if found == true then
 						puts "\tFound: #{desired_output}" if debug
-						return true
+						return wait_thread.value
 					else
 		                raise "Output not found: #{desired_output}"
 					end
