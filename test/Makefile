@@ -1,6 +1,7 @@
 INSPEC=hab pkg exec core/inspec inspec
 
 all:
+	pkill hab-sup | /bin/true # TODO
 	mkdir -p ./logs
 	hab pkg install core/inspec
 	${INSPEC} exec ./hab_inspec/controls/clean_env.rb

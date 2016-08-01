@@ -49,7 +49,7 @@ describe "Habitat CLI" do
         it "should build, install and start a simple service without failure" do
 
             # TODO: this test WILL FAIL if a supervisor is already running.
-            # The core/inspec package is broken, so detecting open ports doesn't
+            # The core/inspec Hab package is broken, so detecting open ports doesn't
             # seem to work unless the control is run remotely.
 
             # building a package can take quite awhile, let's bump the timeout to
@@ -88,8 +88,7 @@ describe "Habitat CLI" do
 			result = ctx.cmd_expect("start #{ctx.hab_origin}/simple_service",
                                     "Shipping out to Boston",
                                     :kill_when_found => true)
-            expect(result.exited?).to be true
-            expect(result.exitstatus).to eq 0
+            # don't check the process status here, we killed it!
         end
     end
 
