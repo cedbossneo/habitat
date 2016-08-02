@@ -1,6 +1,7 @@
 require 'open3'
 require 'pathname'
 require 'securerandom'
+require 'singleton'
 require 'time'
 
 module HabTesting
@@ -26,6 +27,7 @@ module HabTesting
     # The intent of the Platform class is to store any platform-independent
     # variables.
 	class Platform
+        include Singleton
         # path to the `hab` command
 		attr_accessor :hab_bin;
         # TODO: unusued
@@ -216,7 +218,7 @@ module HabTesting
 								puts line if debug
 								if line.include?(desired_output) then
                                     if kill_when_found then
-                                        puts "KILL WHEN FOUND"
+                                        puts "Sending a TERM to child process" if debug
                                         Process.kill('TERM', wait_thread.pid)
                                         found = true
 									    break

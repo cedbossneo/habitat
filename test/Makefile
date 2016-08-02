@@ -1,16 +1,25 @@
 INSPEC=hab pkg exec core/inspec inspec
 
+SPEC_OPTS=--color --require spec_helper --format documentation
+
+SPECS=basic.rb plan_build.rb
+
 all:
 	pkill hab-sup | /bin/true # TODO
 	mkdir -p ./logs
 	hab pkg install core/inspec
 	${INSPEC} exec ./hab_inspec/controls/clean_env.rb
 	${INSPEC} exec ./spec/basic.rb
+	${INSPEC} exec ./spec/plan_build.rb
 
+#dirs = $(shell ls)
+#clean:
+#    @$(foreach dir,$(dirs),echo $(dir);)
 
 specs:
 	mkdir -p ./logs
 	${INSPEC} exec ./spec/basic.rb
+	${INSPEC} exec ./spec/plan_build.rb
 
 unset_all:
 	unset HAB_AUTH_TOKEN
