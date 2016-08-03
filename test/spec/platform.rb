@@ -1,3 +1,4 @@
+require 'mixlib/shellout'
 require 'open3'
 require 'pathname'
 require 'securerandom'
@@ -130,6 +131,7 @@ module HabTesting
 
         # Common setup for tests, including setting a test origin
         # and key generation.
+        # # TODO: move to base class
 		def common_setup
 			ENV['HAB_ORIGIN'] = @hab_origin
 			cmd_expect("origin key generate #{@hab_origin}",
