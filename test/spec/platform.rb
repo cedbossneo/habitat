@@ -201,7 +201,6 @@ module HabTesting
             # have to clean things up manually.
             def exec(command)
                 if @cleanup then
-                    puts "Trying to run #{command}"
                     `#{command}`
                 else
                     # this is lame, sorry
@@ -318,7 +317,7 @@ module HabTesting
                         puts "Timeout" if debug
                         Process.kill('KILL', wait_thread.pid)
                         puts "Child process killed" if debug
-                        raise "Proces timeout waiting for desired output: #{desired_output}"
+                        raise "Process timeout waiting for desired output: #{desired_output}"
                     ensure
                         output_log.close()
                     end

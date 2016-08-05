@@ -93,10 +93,8 @@ describe "Habitat CLI" do
             # did the install actually create the path
             expect(File.exist?(installed_path)).to be true
 
-            metafiles = %w(FILES IDENT MANIFEST PATH TARGET booger)
-            metafiles.each do |mf|
-                puts "Looking for #{mf}"
-                puts Pathname.new(installed_path).join(mf)
+            pkg_files = %w(FILES IDENT MANIFEST PATH TARGET bin default.toml)
+            pkg_files.each do |mf|
                 expect(File.exist?(Pathname.new(installed_path).join(mf))).to be true
             end
 

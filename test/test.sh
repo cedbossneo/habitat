@@ -18,6 +18,7 @@
 # limitations under the License.
 
 set -e
+cat banner
 
 echo "Loading default env"
 # load in common test env vars
