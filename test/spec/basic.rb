@@ -1,19 +1,8 @@
 require 'pathname'
-# TODO: remove this!
-require 'mixlib/shellout'
 
 # TODO: .rspec file doesn't seem to be honored, so we need
 # to manually include the spec_helper here
 require_relative 'spec_helper'
-
-class OutputWatcher
-    def initialize
-    end
-
-    def <<(data)
-        puts ">>> ${data}"
-    end
-end
 
 describe "Habitat CLI" do
     # TODO: maybe extract this into a module in the future
@@ -76,7 +65,8 @@ describe "Habitat CLI" do
             built_artifact = Pathname.new("results").join(last_build["pkg_artifact"])
             expect(File.exist?(built_artifact)).to be true
             result = platform.cmd_expect("pkg install ./results/#{last_build["pkg_artifact"]}",
-                                         "Install of #{platform.hab_origin}/simple_service/0.0.1/#{last_build["pkg_release"]} complete with 1 packages installed",
+                                         "Install of #{platform.hab_origin}/simple_service/0.0.1/"\
+                                         "#{last_build["pkg_release"]} complete with 1 packages installed",
                                          :kill_when_found => false)
             expect(result.exited?).to be true
             expect(result.exitstatus).to eq 0

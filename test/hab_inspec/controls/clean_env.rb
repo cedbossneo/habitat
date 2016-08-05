@@ -29,6 +29,11 @@ describe file("results") do
     it { should_not exist }
 end
 
+
+describe file("/hab/svc/simple_service") do
+    it { should_not exist }
+end
+
 describe user('hab') do
     it { should exist }
 end

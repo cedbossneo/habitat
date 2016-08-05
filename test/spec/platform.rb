@@ -4,6 +4,7 @@ require 'pathname'
 require 'securerandom'
 require 'singleton'
 require 'time'
+require 'timeout'
 
 module HabTesting
 
@@ -13,7 +14,7 @@ module HabTesting
         # and return a hash containing all key/values
         def self.parse_last_build
             results = {}
-            ## TODO: we should have a test root dir var
+            ## TODO: should we have a test root dir var?
             File.open("results/last_build.env", "r") do |f|
                 f.each_line do |line|
                     chunks = line.split("=")
@@ -68,6 +69,11 @@ module HabTesting
         # if there is an example failure, don't cleanup the state on
         # disk if @cleanup is set to false
         attr_accessor :cleanup;
+
+        # for any command that spawn child processes, we can use
+        # all_pids to store pid info to see if we're leaving any
+        # processes running after tests have completed
+        attr_accessor :all_pids;
 
         # generate a unique name for use in testing
         def unique_name()
@@ -124,21 +130,28 @@ module HabTesting
 
         # Common teardown for tests
         def common_teardown
+            if @cmd_debug
+                @all_pids.each do |pidinfo|
+                    puts "PID INFO: #{pidinfo}"
+                end
+            end
+
             if @cleanup
                 puts "Clearing test environment"
                 ENV.delete('HAB_ORIGIN')
                 # TODO
                 #`rm -rf ./results`
                 # TODO: kill the studio only if all tests pass?
-                #ctx.cmd("studio rm")
             else
                 puts "WARNING: not cleaning up testing environment"
             end
         end
+
     end
 
     class LinuxPlatform < Platform
         def initialize
+            @all_pids = []
             @hab_root_path = Dir.mktmpdir("hab_test_root")
 
             @hab_bin="/src/components/hab/target/debug/hab"
@@ -179,8 +192,15 @@ module HabTesting
             `echo #{fullcmdline} >> #{log_file_name()}`
             puts "Running: #{fullcmdline}"
             pid = spawn(fullcmdline)
+            @all_pids << [cmdline, pid]
             Process.wait pid
             return $?
+        end
+
+        def show_env()
+            puts "X" * 80
+            puts `env`
+            puts "X" * 80
         end
 
         # execute a possibly long-running process and wait for a particular string
@@ -189,43 +209,38 @@ module HabTesting
         def cmd_expect(cmdline, desired_output, **cmd_options)
             puts "X" * 80 if @cmd_debug
             puts cmd_options if @cmd_debug
-
             debug = cmd_options[:debug] || @cmd_debug
 
             timeout = cmd_options[:timeout_seconds] || @cmd_timeout_seconds
             kill_when_found = cmd_options[:kill_when_found] || false
-
-            #puts "KILL_WHEN_FOUND = #{kill_when_found}"
-            #puts "TIMEOUT = #{timeout}"
-            #puts "DBEUG = #{debug}"
-
-            if debug then
-                puts "X" * 80
-                puts `env`
-                puts "X" * 80
-            end
-
-            fullcmdline = "#{@hab_bin} #{cmdline} | tee -a #{log_file_name()} 2>&1"
+            show_env() if debug
+            # passing output to | tee
+            #fullcmdline = "#{@hab_bin} #{cmdline} | tee -a #{log_file_name()} 2>&1"
+            fullcmdline = "#{@hab_bin} #{cmdline}"
             # record the command we'll be running in the log file
             `echo #{fullcmdline} >> #{log_file_name()}`
             puts "Running: #{fullcmdline}"
 
+            output_log = open(log_file_name(), 'a')
             begin
                 Open3.popen3(fullcmdline) do |stdin, stdout, stderr, wait_thread|
-                    puts "Started child process" if debug
+                    @all_pids << [fullcmdline, wait_thread.pid]
+                    puts "Started child process id #{wait_thread[:pid]}" if debug
                     found = false
                     begin
                         Timeout::timeout(timeout) do
                             loop do
                                 line = stdout.readline()
+                                output_log.puts line
                                 puts line if debug
                                 if line.include?(desired_output) then
                                     if kill_when_found then
-                                        puts "Sending a TERM to child process" if debug
-                                        Process.kill('TERM', wait_thread.pid)
+                                        puts "Sending a KILL to child process #{wait_thread.pid}" if debug
+                                        Process.kill('KILL', wait_thread.pid)
                                         found = true
                                         break
                                     else
+                                        puts "Output found but not sending signal to child" if debug
                                         # let the process finish, or timeout
                                         found = true
                                     end
@@ -234,6 +249,7 @@ module HabTesting
                         end
                     rescue EOFError
                         if found then
+                            puts "Found value as process finished" if debug
                             return wait_thread.value
                         else
                             raise "Process finished without finding desired output: #{desired_output}"
@@ -241,9 +257,11 @@ module HabTesting
                     rescue Timeout::Error
                         # TODO: do timeouts always return failure?
                         puts "Timeout" if debug
-                        Process.kill('TERM', wait_thread.pid)
+                        Process.kill('KILL', wait_thread.pid)
                         puts "Child process killed" if debug
                         raise "Proces timeout waiting for desired output: #{desired_output}"
+                    ensure
+                        output_log.close()
                     end
 
                     if found == true then

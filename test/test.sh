@@ -32,25 +32,15 @@ export BUNDLER_PACKAGE=core/bundler
 run_tests() {
 	pkill hab-sup | /bin/true # TODO
 	${INSPEC} exec ./hab_inspec/controls/clean_env.rb
-	${INSPEC} exec ./spec/basic.rb
-	${INSPEC} exec ./spec/plan_build.rb
+	${RSPEC} ./spec/basic.rb
+	#${RSPEC} ./spec/plan-build.rb
 }
 
+# TODO: clean this up!
 setup_deps() {
 	mkdir -p ./logs
 	${HAB} pkg install ${INSPEC_PACKAGE}
 	${HAB} pkg install ${BUNDLER_PACKAGE}
-	for b in "${INSPEC_BINS[@]}"; do
-		${HAB} pkg binlink ${INSPEC_PACKAGE} ${b}
-	done
-
-	for b in "${RUBY_BINS[@]}"; do
-		${HAB} pkg binlink ${RUBY_PACKAGE} ${b}
-	done
-
-	for b in "${BUNDLER_BINS[@]}"; do
-		${HAB} pkg binlink ${BUNDLER_PACKAGE} ${b}
-	done
 
     export INSPEC_BUNDLE="$(hab pkg path $INSPEC_PACKAGE)/bundle"
     export GEM_HOME="${INSPEC_BUNDLE}/ruby/${RUBY_VERSION}"
@@ -61,6 +51,8 @@ setup_deps() {
 setup_deps
 
 INSPEC="${HAB} pkg exec ${INSPEC_PACKAGE} inspec"
+RSPEC="${HAB} pkg exec ${INSPEC_PACKAGE} rspec"
+
 INSPEC_BINS=(coderay htmldiff inspec pry rwinrm thor erubis httpclient ldiff rspec rwinrmcp)
 RUBY_BINS=(erb irb rdoc ruby gem rake ri update_rubygems)
 BUNDLER_BINS=(bundler)
