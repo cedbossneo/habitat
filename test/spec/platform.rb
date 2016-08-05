@@ -1,15 +1,22 @@
+require 'fileutils'
 require 'mixlib/shellout'
 require 'open3'
 require 'pathname'
 require 'securerandom'
+require 'shellwords'
 require 'singleton'
 require 'time'
 require 'timeout'
 
 module HabTesting
 
-    module Utils
+    module Constants
+        Metafiles = %w(BUILD_DEPS BUILD_TDEPS CFLAGS CPPFLAGS CXXFLAGS DEPS
+                       FILES IDENT LDFLAGS LD_RUN_PATH MANIFEST TARGET TDEPS)
+    end
 
+
+    module Utils
         # parse a ./results/last_build.env file, split lines on `=`
         # and return a hash containing all key/values
         def self.parse_last_build
@@ -26,54 +33,73 @@ module HabTesting
     end
 
 
+    TestDir = Struct.new(:path, :caller)
+
     # The intent of the Platform class is to store any platform-independent
     # variables.
     class Platform
         include Singleton
         # path to the `hab` command
-        attr_accessor :hab_bin;
-        # TODO: unusued
-        attr_accessor :hab_key_cache;
+        attr_accessor :hab_bin
+
+        # location to the Habitat key cache
+        attr_accessor :hab_key_cache
+
         # A unique testing organization
-        attr_accessor :hab_org;
+        attr_accessor :hab_org
+
         # A unique testing origin
-        attr_accessor :hab_origin;
+        attr_accessor :hab_origin
+
         # The path to installed packages, (ex: /hab/pkgs on Linux)
-        attr_accessor :hab_pkg_path;
-        # TODO: path to the build command
-        attr_accessor :hab_plan_build;
+        attr_accessor :hab_pkg_path
+
         # A unique testing ring name
-        attr_accessor :hab_ring;
-        # TODO: The root location of Habitat data, HAB_ROOT_PATH
-        attr_accessor :hab_root_path;
-        # A unique testing service group
-        attr_accessor :hab_service_group;
-        # TODO: the location of the studio root
-        attr_accessor :hab_studio_root;
+        attr_accessor :hab_ring
+
+        # The path where running services are installed
+        attr_accessor :hab_svc_path
+
         # path to the `hab-sup` command
-        attr_accessor :hab_sup_bin;
+        attr_accessor :hab_sup_bin
+
         # A unique testing user
-        attr_accessor :hab_user;
+        attr_accessor :hab_user
 
         # command output logs are stored in this directory
-        attr_accessor :log_dir;
+        attr_accessor :log_dir
+
         # The filename currently be used to log command output.
         # This file is stored in @log_dir
-        attr_accessor :log_name;
+        attr_accessor :log_name
 
         # if true, display command output
-        attr_accessor :cmd_debug;
+        attr_accessor :cmd_debug
+
         # default timeout for child processes before failing
-        attr_accessor :cmd_timeout_seconds;
+        attr_accessor :cmd_timeout_seconds
 
         # if there is an example failure, don't cleanup the state on
         # disk if @cleanup is set to false
-        attr_accessor :cleanup;
+        attr_accessor :cleanup
 
         # for any command that spawn child processes, we can use
-        # all_pids to store pid info to see if we're leaving any
+        # all_children to store pid info to see if we're leaving any
         # processes running after tests have completed
-        attr_accessor :all_pids;
+        attr_accessor :all_children
+
+        # we allow each test to register a set of directories
+        # that are generated as part of testing.
+        # We'll clean up directories upon completion if tests pass.
+        attr_accessor :test_directories
+
+        def initialize
+            @all_children = []
+            @cleanup = true
+            @cmd_debug = false
+            @cmd_timeout_seconds = 30
+            @test_directories = []
+        end
 
         # generate a unique name for use in testing
         def unique_name()
@@ -102,7 +128,7 @@ module HabTesting
             puts "-" * 80
             puts "Test params:"
             self.instance_variables.sort.each do |k|
-                puts "#{k[1..-1]} = #{self.instance_variable_get(k)}"
+                puts "\t #{k[1..-1]} = #{self.instance_variable_get(k)}"
             end
             puts "Logging command output to #{self.log_file_name()}"
             puts "-" * 80
@@ -113,6 +139,9 @@ module HabTesting
         # and key generation.
         # # TODO: move to base class
         def common_setup
+            if not ENV['HAB_TEST_DEBUG'].nil? then
+                @cmd_debug = true
+            end
             ENV['HAB_ORIGIN'] = @hab_origin
             cmd_expect("origin key generate #{@hab_origin}",
                        "Generated origin key pair #{@hab_origin}")
@@ -120,62 +149,91 @@ module HabTesting
                        "Generated user key pair #{@hab_user}")
             cmd_expect("ring key generate #{@hab_ring}",
                        "Generated ring key pair #{@hab_ring}")
-            # remove the studio if it already exists
-            cmd("studio rm #{@hab_origin}")
-            #puts "Creating new studio, this may take a few minutes"
-            #ctx.cmd("studio -k #{ctx.hab_origin} new")
-            #puts "Setup complete"
+            # we don't generate a service key here because they depend
+            # on the name of the service that's being run
+            puts "Setup complete"
             puts "-" * 80
         end
 
         # Common teardown for tests
         def common_teardown
+            # display all pids that were created with cmd + cmd_expect
             if @cmd_debug
-                @all_pids.each do |pidinfo|
+                @all_children.each do |pidinfo|
                     puts "PID INFO: #{pidinfo}"
                 end
             end
-
-            if @cleanup
-                puts "Clearing test environment"
-                ENV.delete('HAB_ORIGIN')
-                # TODO
-                #`rm -rf ./results`
-                # TODO: kill the studio only if all tests pass?
-            else
-                puts "WARNING: not cleaning up testing environment"
-            end
         end
 
+        def register_dir(d)
+            c = caller[0].match(/(.+):(\d+)/)[1..2].join(" line ")
+            @test_directories << TestDir::new(d, c)
+        end
     end
 
     class LinuxPlatform < Platform
         def initialize
-            @all_pids = []
-            @hab_root_path = Dir.mktmpdir("hab_test_root")
-
+            super
             @hab_bin="/src/components/hab/target/debug/hab"
-            #@hab_key_cache = "#{@hab_root_path}/hab/cache/keys"
+            @hab_key_cache = "/hab/cache/keys"
             @hab_org = "org_#{unique_name()}"
             @hab_origin = "origin_#{unique_name()}"
-            #@hab_plan_build = "/src/components/plan-build/bin/hab-plan-build.sh"
             @hab_pkg_path = "/hab/pkgs"
             @hab_ring = "ring_#{unique_name()}"
-            # todo
-            @hab_service_group = "service_group_#{unique_name()}"
-            #@hab_studio_root = Dir.mktmpdir("hab_test_studio")
             @hab_sup_bin = "/src/components/sup/target/debug/hab-sup"
+            @hab_svc_path = "/hab/svc"
             @hab_user = "user_#{unique_name()}"
-
-            @log_name = "hab_test-#{Time.now.utc.iso8601.gsub(/\:/, '-')}.log"
             @log_dir = "./logs"
+            @log_name = "hab_test-#{Time.now.utc.iso8601.gsub(/\:/, '-')}.log"
 
-            @cleanup = true
-            @cmd_debug = false
-            @cmd_timeout_seconds = 30
             banner()
         end
 
+        def common_setup
+            super
+        end
+
+        def common_teardown
+            super
+            # util function that will run our cleanup commands for
+            # us unless tests have failed. If tests have failed,
+            # then we generate a cleanup.sh script so you don't
+            # have to clean things up manually.
+            def exec(command)
+                if @cleanup then
+                    puts "Trying to run #{command}"
+                    `#{command}`
+                else
+                    # this is lame, sorry
+                    open('cleanup.sh', 'a') { |f|
+                        f.puts command
+                    }
+                end
+            end
+
+            if not @cleanup
+                `rm -f cleanup.sh`
+                `touch cleanup.sh`
+                `chmod 700 cleanup.sh`
+            end
+
+            exec "unset HAB_ORIGIN"
+            # remove generated keys
+            exec "rm -f #{Pathname.new(@hab_key_cache).join(@hab_origin)}*"
+            exec "rm -f #{Pathname.new(@hab_key_cache).join(@hab_user)}*"
+            exec "rm -f #{Pathname.new(@hab_key_cache).join(@hab_ring)}*"
+            @test_directories.each do |d|
+                exec "echo \"Removing dir: #{d.path}\""
+                exec "echo \"   registered in: #{d.caller}\""
+                exec "rm -rf #{d.path}"
+            end
+
+            if not @cleanup
+                puts "WARNING: not cleaning up testing environment"
+                puts "Please run cleanup.sh manually"
+            end
+
+        end
 
         # execute a `hab` subcommand and wait for the process to finish
         def cmd(cmdline, **cmd_options)
@@ -190,9 +248,10 @@ module HabTesting
             fullcmdline = "#{@hab_bin} #{cmdline} | tee -a #{log_file_name()} 2>&1"
             # record the command we'll be running in the log file
             `echo #{fullcmdline} >> #{log_file_name()}`
-            puts "Running: #{fullcmdline}"
+            puts "\t\tRunning: #{fullcmdline}"
+            # TODO: replace this with Mixlib:::Shellout
             pid = spawn(fullcmdline)
-            @all_pids << [cmdline, pid]
+            @all_children << [cmdline, pid]
             Process.wait pid
             return $?
         end
@@ -219,12 +278,12 @@ module HabTesting
             fullcmdline = "#{@hab_bin} #{cmdline}"
             # record the command we'll be running in the log file
             `echo #{fullcmdline} >> #{log_file_name()}`
-            puts "Running: #{fullcmdline}"
+            puts "\t\tRunning: #{fullcmdline}"
 
             output_log = open(log_file_name(), 'a')
             begin
                 Open3.popen3(fullcmdline) do |stdin, stdout, stderr, wait_thread|
-                    @all_pids << [fullcmdline, wait_thread.pid]
+                    @all_children << [fullcmdline, wait_thread.pid]
                     puts "Started child process id #{wait_thread[:pid]}" if debug
                     found = false
                     begin
