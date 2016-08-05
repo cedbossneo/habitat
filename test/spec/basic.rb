@@ -77,8 +77,8 @@ describe "Habitat CLI" do
             # install the package
             result = platform.cmd_expect("pkg install ./results/#{last_build["pkg_artifact"]}",
                                          "Install of #{platform.hab_origin}/simple_service/0.0.1/"\
-                                         "#{last_build["pkg_release"]} complete with 1 packages installed",
-                                         :kill_when_found => false)
+                                             "#{last_build["pkg_release"]} complete with 1 packages installed",
+                                             :kill_when_found => false)
             # as the installation command MUST complete, we check return code
             expect(result.exited?).to be true
             expect(result.exitstatus).to eq 0

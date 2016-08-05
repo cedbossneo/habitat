@@ -13,6 +13,19 @@ module HabTesting
     module Constants
         Metafiles = %w(BUILD_DEPS BUILD_TDEPS CFLAGS CPPFLAGS CXXFLAGS DEPS
                        FILES IDENT LDFLAGS LD_RUN_PATH MANIFEST TARGET TDEPS)
+
+        EnvVars = %w(HAB_AUTH_TOKEN
+                    HAB_CACHE_KEY_PATH
+                    HAB_DEPOT_URL
+                    HAB_ORG
+                    HAB_ORIGIN
+                    HAB_ORIGIN_KEYS
+                    HAB_RING
+                    HAB_RING_KEY
+                    HAB_ROOT_PATH
+                    HAB_STUDIOS_HOME
+                    HAB_STUDIO_ROOT
+                    HAB_USER)
     end
 
 
@@ -106,32 +119,14 @@ module HabTesting
             SecureRandom.uuid
         end
 
-        # return a list of HAB_ environment vars
-        def env_vars()
-            #TODO: share these between Inspec and Rspec?
-            return %w(HAB_AUTH_TOKEN
-                    HAB_CACHE_KEY_PATH
-                    HAB_DEPOT_URL
-                    HAB_ORG
-                    HAB_ORIGIN
-                    HAB_ORIGIN_KEYS
-                    HAB_RING
-                    HAB_RING_KEY
-                    HAB_ROOT_PATH
-                    HAB_STUDIOS_HOME
-                    HAB_STUDIO_ROOT
-                    HAB_USER)
-        end
 
         # display testing parameters upon startup
         def banner()
-            puts "-" * 80
-            puts "Test params:"
+            puts "→ Test params:"
             self.instance_variables.sort.each do |k|
                 puts "\t #{k[1..-1]} = #{self.instance_variable_get(k)}"
             end
-            puts "Logging command output to #{self.log_file_name()}"
-            puts "-" * 80
+            puts "→ Logging command output to #{self.log_file_name()}"
         end
 
 
@@ -140,18 +135,28 @@ module HabTesting
         # # TODO: move to base class
         def common_setup
             if not ENV['HAB_TEST_DEBUG'].nil? then
+                puts "★ Debugging enabled"
                 @cmd_debug = true
             end
             ENV['HAB_ORIGIN'] = @hab_origin
+            puts "» Generating origin key"
             cmd_expect("origin key generate #{@hab_origin}",
                        "Generated origin key pair #{@hab_origin}")
+            puts "★ Generated origin key"
+
+            puts "» Generating user key"
             cmd_expect("user key generate #{@hab_user}",
                        "Generated user key pair #{@hab_user}")
+            puts "★ Generated user key"
+
+            puts "» Generating ring key"
             cmd_expect("ring key generate #{@hab_ring}",
                        "Generated ring key pair #{@hab_ring}")
+            puts "★ Generated ring key"
+
             # we don't generate a service key here because they depend
             # on the name of the service that's being run
-            puts "Setup complete"
+            puts "★ Setup complete"
             puts "-" * 80
         end
 
@@ -193,6 +198,11 @@ module HabTesting
             super
         end
 
+
+        # this function will either run all commands contained within
+        # if the tests pass, OR generate a cleanup.sh script
+        # so you can clean the env yourself after investigating
+        # why tests failed.
         def common_teardown
             super
             # util function that will run our cleanup commands for
@@ -201,6 +211,7 @@ module HabTesting
             # have to clean things up manually.
             def exec(command)
                 if @cleanup then
+                    # TODO: good candidate for Mixlib::Shellout
                     `#{command}`
                 else
                     # this is lame, sorry
@@ -221,6 +232,7 @@ module HabTesting
             exec "rm -f #{Pathname.new(@hab_key_cache).join(@hab_origin)}*"
             exec "rm -f #{Pathname.new(@hab_key_cache).join(@hab_user)}*"
             exec "rm -f #{Pathname.new(@hab_key_cache).join(@hab_ring)}*"
+            #TODO: once we have service keys, we'll have to remove them here
             @test_directories.each do |d|
                 exec "echo \"Removing dir: #{d.path}\""
                 exec "echo \"   registered in: #{d.caller}\""
@@ -247,7 +259,7 @@ module HabTesting
             fullcmdline = "#{@hab_bin} #{cmdline} | tee -a #{log_file_name()} 2>&1"
             # record the command we'll be running in the log file
             `echo #{fullcmdline} >> #{log_file_name()}`
-            puts "\t\tRunning: #{fullcmdline}"
+            puts " → #{fullcmdline}"
             # TODO: replace this with Mixlib:::Shellout
             pid = spawn(fullcmdline)
             @all_children << [cmdline, pid]
@@ -277,7 +289,7 @@ module HabTesting
             fullcmdline = "#{@hab_bin} #{cmdline}"
             # record the command we'll be running in the log file
             `echo #{fullcmdline} >> #{log_file_name()}`
-            puts "\t\tRunning: #{fullcmdline}"
+            puts " → #{fullcmdline}"
 
             output_log = open(log_file_name(), 'a')
             begin
@@ -335,14 +347,6 @@ module HabTesting
         # generate a unique log file name in the given log_dir
         def log_file_name()
             File.join(@log_dir, @log_name)
-        end
-
-        def mk_temp_dir()
-            # TODO: remove temp directory before creating
-            # TODO: keep track of temp files and remove them upon success?
-            dir = Dir.mktmpdir("hab_test")
-            puts "Temp dir = #{dir}"
-            return dir
         end
 
     end

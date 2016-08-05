@@ -18,9 +18,10 @@
 # limitations under the License.
 
 set -e
+
+# sadly, this is NOT a banner of a cat
 cat banner
 
-echo "Loading default env"
 # load in common test env vars
 HAB=/bin/hab
 
@@ -29,27 +30,17 @@ export RUBY_PACKAGE=core/ruby
 export RUBY_VERSION="2.3.0"
 export BUNDLER_PACKAGE=core/bundler
 
+mkdir -p ./logs
+echo "Installing Habitat testing packages..."
+echo "» Installing Chec Inspec"
+${HAB} pkg install ${INSPEC_PACKAGE} >> ./logs/pkg_install.log 2>&1
+echo "» Installing Bundler"
+${HAB} pkg install ${BUNDLER_PACKAGE} >> ./logs/pkg_install.log 2>&1
 
-run_tests() {
-	pkill hab-sup | /bin/true # TODO
-	${INSPEC} exec ./hab_inspec/controls/clean_env.rb
-	${RSPEC} ./spec/basic.rb
-	#${RSPEC} ./spec/plan-build.rb
-}
-
-# TODO: clean this up!
-setup_deps() {
-	mkdir -p ./logs
-	${HAB} pkg install ${INSPEC_PACKAGE}
-	${HAB} pkg install ${BUNDLER_PACKAGE}
-
-    export INSPEC_BUNDLE="$(hab pkg path $INSPEC_PACKAGE)/bundle"
-    export GEM_HOME="${INSPEC_BUNDLE}/ruby/${RUBY_VERSION}"
-    export GEM_PATH="$(hab pkg path ${RUBY_PACKAGE})/lib/ruby/gems/${RUBY_VERSION}:$(hab pkg path ${BUNDLER_PACKAGE}):${GEM_HOME}"
-    export LD_LIBRARY_PATH="$(hab pkg path core/gcc-libs)/lib)"
-}
-
-setup_deps
+export INSPEC_BUNDLE="$(hab pkg path $INSPEC_PACKAGE)/bundle"
+export GEM_HOME="${INSPEC_BUNDLE}/ruby/${RUBY_VERSION}"
+export GEM_PATH="$(hab pkg path ${RUBY_PACKAGE})/lib/ruby/gems/${RUBY_VERSION}:$(hab pkg path ${BUNDLER_PACKAGE}):${GEM_HOME}"
+export LD_LIBRARY_PATH="$(hab pkg path core/gcc-libs)/lib)"
 
 INSPEC="${HAB} pkg exec ${INSPEC_PACKAGE} inspec"
 RSPEC="${HAB} pkg exec ${INSPEC_PACKAGE} rspec"
@@ -62,5 +53,25 @@ BUNDLER_BINS=(bundler)
 SPEC_OPTS="--color --require spec_helper --format documentation"
 export SPEC_OPTS
 
-echo "Running tests"
-run_tests
+
+running_sups=$(ps -ef | grep hab-sup | grep -v grep | wc -l)
+if [ $running_sups -gt 0 ]; then
+    echo "There are running Habitat supervisors, cannot continue testing"
+    exit 1
+fi
+
+echo "» Running tests"
+test_start=$(date)
+echo "☛ ${test_start}"
+# Check to see if we have a clean testing environment
+${INSPEC} exec ./hab_inspec/controls/clean_env.rb
+
+# Check to see if the basic build/install/run functionality works
+${RSPEC} ./spec/basic.rb
+
+# Test the rest of the specs
+# TODO
+
+test_finish=$(date)
+echo "☛ ${test_finish}"
+echo "★ Finished"
