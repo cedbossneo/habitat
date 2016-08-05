@@ -25,17 +25,42 @@ cat banner
 # load in common test env vars
 HAB=/bin/hab
 
+# TODO
+# TODO
+# TODO
+# TODO
+# TODO
+# TODO
+# CHANGE PACKAGES FROM METADAVE TO CORE
+#   last minute tweaks to net-tools
+# TODO
+# TODO
+# TODO
+# TODO
+# TODO
+# TODO
+
+
 export INSPEC_PACKAGE=metadave/inspec
 export RUBY_PACKAGE=core/ruby
 export RUBY_VERSION="2.3.0"
 export BUNDLER_PACKAGE=core/bundler
 
+install_package() {
+    pkg_to_install=$1
+    description=$2
+
+    echo "» Installing ${description}"
+    ${HAB} pkg install ${pkg_to_install} >> ./logs/pkg_install.log 2>&1
+    echo "★ Installed ${description}"
+}
+
 mkdir -p ./logs
 echo "Installing Habitat testing packages..."
-echo "» Installing Chec Inspec"
-${HAB} pkg install ${INSPEC_PACKAGE} >> ./logs/pkg_install.log 2>&1
-echo "» Installing Bundler"
-${HAB} pkg install ${BUNDLER_PACKAGE} >> ./logs/pkg_install.log 2>&1
+
+install_package ${INSPEC_PACKAGE} "Chef Inspec"
+install_package ${BUNDLER_PACKAGE} "Bundler"
+
 
 export INSPEC_BUNDLE="$(hab pkg path $INSPEC_PACKAGE)/bundle"
 export GEM_HOME="${INSPEC_BUNDLE}/ruby/${RUBY_VERSION}"
